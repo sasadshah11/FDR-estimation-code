@@ -1,0 +1,45 @@
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+
+# Define the paths to the input files
+combined_path = '/Users/ayeshaferoz/Desktop/Parentdirectory/combined.csv'
+original_path = '/Users/ayeshaferoz/Downloads/originalmasses.csv'
+
+# Read the input files into pandas dataframes
+combined_df = pd.read_csv(combined_path)
+original_df = pd.read_csv(original_path, encoding='utf-8')
+
+# Define the tolerance limit in parts per million
+ppmtol = 10
+
+# Create the fdval dataframe by combining the ScanNum and MonoisotopicMass columns from the combined_df
+fdval = combined_df[['ScanNum', 'MonoisotopicMass']]
+
+# Create the tpindex1 logical index by checking if the values in the first column of fdval are present in the first column of original_df
+tpindex1 = fdval.iloc[:,0].isin(original_df.iloc[:,0])
+
+# Define a function to calculate the ppm difference between two values
+def ppm_diff(value1, value2):
+    return abs(value1 - value2) / value1 * 1e6
+
+# Create the tpindex2 logical index by comparing the values in the second column of fdval and original_df within the ppm tolerance specified by ppmtol
+tpindex2 = np.isclose(fdval.iloc[:,1][:, np.newaxis], original_df.iloc[:,1], rtol=ppmtol/1e6, atol=0)
+
+# Create the tpindex logical index by combining tpindex1, tpindex2, and the DummyIndex column from combined_df with values of 0
+tpindex = np.logical_and.reduce((tpindex1, tpindex2, combined_df['DummyIndex']==0))
+
+# Create the fpindex logical index by combining the negation of tpindex1, tpindex2, and the DummyIndex column from combined_df with values of 0
+fpindex = np.logical_and.reduce((~tpindex1, ~tpindex2, combined_df['DummyIndex']==0))
+
+# Create the Decoyindex logical index by checking whether the value of DummyIndex in combined_df is greater than zero
+Decoyindex = combined_df['DummyIndex'] > 0
+
+# Plot the histograms of QScore column in combined_df for fpindex and Decoyindex
+plt.figure(figsize=(8,6))
+plt.hist(combined_df.loc[fpindex, 'QScore'], bins=20, alpha=0.5, label='fpindex')
+plt.hist(combined_df.loc[Decoyindex, 'QScore'], bins=20, alpha=0.5, label='Decoyindex')
+plt.legend(fontsize=12)
+plt.xlabel('QScore', fontsize=14)
+plt.ylabel('Count', fontsize=14)
+plt.show()
