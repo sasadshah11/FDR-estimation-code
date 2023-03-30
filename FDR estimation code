@@ -4,7 +4,7 @@ import matplotlib.pyplot as plt
 
 # Define the paths to the input files
 combined_path = '/Users/ayeshaferoz/Desktop/Parentdirectory/combined.csv'
-original_path = '/Users/ayeshaferoz/Downloads/originalmasses.csv'
+original_path = '/Users/ayeshaferoz/Desktop/Originalmasses.csv'
 
 # Read the input files into pandas dataframes
 combined_df = pd.read_csv(combined_path)
