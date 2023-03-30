@@ -1,0 +1,14 @@
+import os
+import pandas as pd
+
+# Define the path to the directory containing the TSV files
+directory_path = "/Users/ayeshaferoz/Desktop/Parentdirectory"
+
+# Get a list of all TSV files in the directory
+tsv_files = [f for f in os.listdir(directory_path) if f.endswith('.tsv')]
+
+# Read each TSV file into a pandas DataFrame and concatenate them into a single DataFrame
+combined_df = pd.concat([pd.read_csv(os.path.join(directory_path, f), sep='\t') for f in tsv_files], ignore_index=True)
+
+# Write the combined DataFrame to a new TSV file
+combined_df.to_csv(os.path.join(directory_path, 'combined.tsv'), sep='\t', index=False)
