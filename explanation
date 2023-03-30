@@ -1,0 +1,28 @@
+This code performs some analysis on a TSV file, which is a tab-separated value file format commonly used for data exchange in bioinformatics. Here's a brief explanation of each line:
+
+load('decoy.mat'): This line loads a MATLAB file called "decoy.mat", which presumably contains some data that is used later in the code.
+tsv = tdfread('/Users/ayeshaferoz/Desktop/Parentdirectory/merged_file.tsv');
+This line reads a TSV file called "merged_file.tsv" and stores its contents in a structure called tsv. 
+
+The file path indicates that the file is located on the desktop of the user "ayeshaferoz" in a directory called "Parentdirectory".
+The next several lines that are commented out (%tsv = tdfread('syntetic_exp_SN1p0_1-27_profile (1)_ms1.tsv');, etc.) suggest that there are several other TSV files that could be used instead of "merged_file.tsv", but they are not currently being used.
+trueset=[scan3 t3]; 
+
+This line creates a matrix called trueset that contains two columns, scan3 and t3, which are presumably arrays of scan numbers and masses, respectively.
+ppmtol = 10; This line sets a variable ppmtol to a value of 10, which will be used later in the code.
+fdval = [tsv.ScanNum tsv.MonoisotopicMass]; This line creates a matrix called fdval that contains two columns, ScanNum and MonoisotopicMass, which are presumably scan numbers and masses from the tsv structure.
+tpindex1 = ismember(fdval(:,1), trueset(:,1));
+This line creates a logical array called tpindex1 that is true for any rows of fdval whose scan number is also in trueset.
+tpindex2 = sum(abs(fdval(tpindex1,2)' - trueset(:,2))./max(fdval(tpindex1,2)', trueset(:,2))*1e6 < ppmtol,1) > 0; 
+
+This line creates another logical array called tpindex2 that is true for any rows of fdval whose mass is within 10 ppm of a mass in trueset.
+tpindex = tpindex1 & tpindex2' & tsv.Decoy == 0; 
+This line creates a final logical array called tpindex that is true for any rows of tsv that satisfy the conditions of both tpindex1 and tpindex2, and whose Decoy column is 0.
+fpindex = (~tpindex1 | ~tpindex2') & tsv.Decoy == 0; 
+This line creates another logical array called fpindex that is true for any rows of tsv that are not true positives (~tpindex1 | ~tpindex2') and whose Decoy column is 0.
+decoyindex = tsv.Decoy > 0 ; 
+This line creates a logical array called decoyindex that is true for any rows of tsv whose Decoy column is greater than 0.
+figure1 = figure('defaultAxesFontSize',14); 
+
+This line creates a new figure window with default font size of 14, which will be used to display a histogram.
+`histogram(tsv.QScore(fpindex),0
