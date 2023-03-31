@@ -1,0 +1,17 @@
+import os
+import pandas as pd
+
+# Read the Excel sheet
+df = pd.read_excel('/Users/ayeshaferoz/Desktop/testfile.xlsx')
+
+# Remove any spaces or garbage values
+df = df.applymap(lambda x: x.strip() if isinstance(x, str) else x)
+df = df.dropna(how='all')
+
+# Create the directory if it does not exist
+directory = '/Users/ayeshaferoz/Desktop'
+if not os.path.exists(directory):
+    os.makedirs(directory)
+
+# Save the cleaned data to a CSV file called "Distilled.csv"
+df.to_csv('/Users/ayeshaferoz/Desktop/Distilled.csv', index=False)
