@@ -1,0 +1,16 @@
+mport os
+import pandas as pd
+
+# Step 1: Concatenate all Excel files in the folder
+folder_path = '/Users/ayeshaferoz/Desktop/Excelcombine'
+all_files = os.listdir(folder_path)
+excel_files = [file for file in all_files if file.endswith('.xlsx')]
+combined_df = pd.concat([pd.read_excel(os.path.join(folder_path, file)) for file in excel_files])
+
+# Step 2: Convert the concatenated file into CSV
+combined_df.to_csv('combined.csv', index=False)
+
+# Step 3: Choose "Scan" and "Sequence" columns and store them in another CSV file
+chosen_columns = ['Scan', 'Sequence','File name']
+chosen_df = combined_df[chosen_columns]
+chosen_df.to_csv('chosen.csv', index=False)
