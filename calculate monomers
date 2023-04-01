@@ -1,0 +1,18 @@
+import pandas as pd
+from pyopenms import *
+
+# read Excel file
+df = pd.read_csv("/Users/ayeshaferoz/Desktop/Excelcombine/chosen.csv")
+
+# create a new column "Monoisotopic mass"
+df["Monoisotopic mass"] = ""
+
+# iterate over each row and calculate the Monoisotopic mass
+for i, row in df.iterrows():
+    x = row["Sequence"]
+    seq = AASequence.fromString(x)
+    mfull = seq.getMonoWeight()
+    df.at[i, "Monoisotopic mass"] = mfull
+
+# save the updated DataFrame to the same Excel file
+df.to_csv("chosen.csv", index=False)
