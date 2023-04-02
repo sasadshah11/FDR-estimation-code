@@ -1,0 +1,14 @@
+import pandas as pd
+
+# Define the paths to the input and output files
+input_path = '/Users/ayeshaferoz/Documents/Excelcombine/Files/combined_csv_files.csv'
+output_path = '/Users/ayeshaferoz/Documents/Excelcombine/Files/CPO_Scan_Monoisotopic.csv'
+
+# Read the input file into a pandas dataframe
+cpo_df = pd.read_csv(input_path)
+
+# Create a new dataframe containing only the ScanNum and MonoisotopicMass columns
+new_df = cpo_df[['Scan', 'MonoisotopicMass']]
+
+# Write the new dataframe to a CSV file
+new_df.to_csv(output_path, index=False)
