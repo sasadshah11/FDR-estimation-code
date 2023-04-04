@@ -1,0 +1,11 @@
+This section of the code performs a Kolmogorov-Smirnov (KS) test to determine if the two samples (dpv and fpv) come from the same distribution. Here's a breakdown of what each line does:
+
+% cdpv2 = zeros(size(dpv)); % cfpv2 = zeros(size(fpv)); initializes two arrays of the same size as dpv and fpv respectively to store the cumulative distribution functions (CDFs) of the two samples.
+% KS = 0; initializes the KS statistic to zero.
+for i=1:length(dpv) loops through each element of dpv.
+cdpv2(i) = sum(dpv(1:i)); calculates the cumulative sum of the elements of dpv up to the current element i and stores it in cdpv2(i).
+cfpv2(i) = sum(fpv(1:i)); calculates the cumulative sum of the elements of fpv up to the current element i and stores it in cfpv2(i).
+cdpv2 = cdpv2/cdpv2(end); cfpv2 = cfpv2/cfpv2(end); normalizes the CDFs to make them lie between 0 and 1.
+for i=1:length(dpv) loops through each element of dpv again.
+KS = max(KS, abs(cdpv2(i) - cfpv2(i))); computes the maximum difference between the two normalized CDFs at each point and stores it in KS.
+display(['KS : ' num2str(KS)]); displays the value of the KS statistic. The higher the value of KS, the more likely it is that the two samples come from different distributions.
