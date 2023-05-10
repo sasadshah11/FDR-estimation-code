@@ -1,0 +1,44 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load File A and File B
+file_a = pd.read_csv('/Users/ayeshaferoz/Documents/Res=35k,noise=0/Files/charge separate columnsZ.csv')
+file_b = pd.read_csv('/Users/ayeshaferoz/Documents/Res=140k,noise=1e5/adderZ.csv')
+
+# Merge File A and File B on MonoisotopicMass and Charge
+merged = pd.merge(file_b, file_a, on=['MonoisotopicMass', 'Z'], how='left')
+
+# Only consider entries in File B where DummyIndex = 0
+merged = merged.loc[merged['DummyIndex'] == 0]
+
+# Calculate the expected m/z value
+merged['Expected m/z'] = merged['MonoisotopicMass'] / merged['Z']
+
+# Calculate the observed m/z value based on the Charge state
+merged['m/z'] = (merged['MonoisotopicMass'] + (merged['Z'] - 1) * 1.00727646677) / merged['Z']
+
+# Calculate the difference in m/z values between the observed and expected values
+merged['DeltaM/Z'] = merged['m/z'] - merged['Expected m/z']
+
+# Convert the difference in m/z to a mass difference
+merged['DeltaMass'] = merged['DeltaM/Z'] * merged['Z']
+
+# Set a threshold for false positive mass errors
+threshold = 40
+
+# Filter the merged DataFrame to only include entries with DeltaMass > threshold
+false_positives = merged.loc[merged['DeltaMass'].abs() > threshold]
+
+# Calculate the decoy masses based on QScore of file_b whose MonoisotopicMass has DummyIndex > 0
+decoy_masses = file_b.loc[(file_b['DummyIndex'] > 0) & (file_b['QScore']>0), ['MonoisotopicMass', 'QScore']]
+decoy_masses['DeltaMass'] = decoy_masses['MonoisotopicMass'] - 1.00727646677
+
+# Plot the false positives and decoy masses based on their QScore
+plt.figure(figsize=(10,8))
+plt.hist(false_positives['QScore'], bins=100, alpha=0.9, label='False Positives Class 1', color='red')
+plt.hist(decoy_masses['QScore'], bins=100, alpha=0.5, label='Dummy Masses', color='blue')
+plt.xlabel('QScore', fontsize=19)
+plt.ylabel('Count', fontsize=19)
+plt.title('False Positives and Dummy Masses based on QScore', fontsize=22)
+plt.legend()
+plt.show()
