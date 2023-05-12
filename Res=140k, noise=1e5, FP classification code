@@ -1,0 +1,90 @@
+import pandas as pd
+import matplotlib.pyplot as plt
+import numpy as np
+
+# Load File A and File B
+file_a = pd.read_csv('/Users/ayeshaferoz/Documents/Res=35k,noise=0/Files/charge separate columnsZ.csv')
+file_b = pd.read_csv('/Users/ayeshaferoz/Documents/Res=140k,noise=1e5/adderZ.csv')
+ppmtol= 10
+fdval= file_b[['ScanNum','MonoisotopicMass']]
+fdval.loc[:, 'ScanNum']= fdval ['ScanNum']
+print(fdval.iloc[:,1])
+original_scan_nums = file_a['ScanNum'].dropna().replace([np.inf, -np.inf], np.nan).astype(float)
+tpindex1 = fdval['ScanNum'].isin(original_scan_nums)
+def ppm_dif(value1, value2):
+    return abs(value1-value2)/value1*1e6
+tpindex2 = np.isclose(pd.to_numeric(fdval.iloc[:,1], errors='coerce')[:, np.newaxis], pd.to_numeric(file_a.iloc[:,1], errors='coerce'), rtol=ppmtol/1e6, atol=0)
+
+#tpindex2 = np.isclose(fdval.iloc[:,1][:, np.newaxis],original_df.iloc[:,1],rtol=ppmtol/1e6,atol=0)
+tpindex= np.logical_and.reduce((
+    tpindex1.values.flatten(),
+    tpindex2.any(axis=1),
+    combined_df['DummyIndex'].values==0
+))
+print(tpindex)
+# Merge File A and File B on MonoisotopicMass and Charge
+merged = pd.merge(file_b, file_a, on=['MonoisotopicMass', 'Z'], how='left')
+
+# Only consider entries in File B where DummyIndex = 0
+merged = merged.loc[merged['DummyIndex'] == 0]
+
+# Calculate the expected m/z value
+merged['Expected m/z'] = merged['MonoisotopicMass'] / merged['Z']
+
+# Calculate the observed m/z value based on the Charge state
+merged['m/z'] = (merged['MonoisotopicMass'] + (merged['Z'] - 1) * 1.00727646677) / merged['Z']
+
+# Calculate the difference in m/z values between the observed and expected values
+merged['DeltaM/Z'] = merged['m/z'] - merged['Expected m/z']
+
+# Convert the difference in m/z to a mass difference
+merged['DeltaMass'] = merged['DeltaM/Z'] * merged['Z']
+
+# Set a threshold for false positive mass errors
+threshold = 40
+# Calculate False positive class 1
+# Filter the merged DataFrame to only include entries with DeltaMass > threshold
+false_positives_1 = merged.loc[merged['DeltaMass'].abs() > threshold]
+
+# Calculate the decoy masses based on QScore of file_b whose MonoisotopicMass has DummyIndex > 0
+decoy_masses = file_b.loc[(file_b['DummyIndex'] > 0) & (file_b['QScore'] > 0), ['MonoisotopicMass', 'QScore']]
+decoy_masses['DeltaMass'] = decoy_masses['MonoisotopicMass'] - 1.00727646677
+
+# Calculate False Positive Class 2
+#merged_2 = pd.merge(file_b.loc[file_b['DummyIndex'] == 0], file_a, on='ScanNum', how='inner')
+#merged_2['DeltaMass'] = (merged_2['MonoisotopicMass_y'] - merged_2['MonoisotopicMass_x']).abs()
+#false_positives_2 = merged_2.loc[merged_2['DeltaMass'] <= np.sqrt(7.0)/2.0, ['MonoisotopicMass_y', 'QScore']]
+#false_positives_2.columns = ['MonoisotopicMass', 'QScore']
+
+merged_2 = pd.merge(file_b.loc[file_b['DummyIndex'] == 0], file_a, on='ScanNum', how='inner')
+merged_2['DeltaMass'] = (merged_2['MonoisotopicMass_y'] - merged_2['MonoisotopicMass_x']).abs()
+false_positives_2 = merged_2.loc[merged_2['DeltaMass'] <= np.sqrt(10.0)/2.0 * merged_2['MonoisotopicMass_x'] * 1e-6, ['MonoisotopicMass_y', 'QScore']]
+false_positives_2.columns = ['MonoisotopicMass', 'QScore']
+false_positives_class2 = false_positives_2.loc[(false_positives_2['MonoisotopicMass'] > 1000) & (false_positives_2['MonoisotopicMass'] < 5000) & (false_positives_2['QScore'] > 0.7)].shape[0]
+#print("False Positive Class 2: ", false_positives_class2)
+
+
+#Calculate False Positive Class 3
+
+# merge files on ScanNum
+merged_3 = pd.merge(file_a, file_b[file_b['DummyIndex']==0], on='ScanNum', how='inner')
+
+# calculate ppm error between original and deconvolved masses
+merged_3['ppm_error'] = (merged_3['MonoisotopicMass_y'] - merged_3['MonoisotopicMass_x']) / merged_3['MonoisotopicMass_x'] * 1e6
+
+# select only second best matching masses (with PPM error > 10)
+false_positives_3 = merged_3[merged_3['ppm_error'] > 10].groupby('ScanNum').apply(lambda x: x.nlargest(2, 'QScore')).reset_index(drop=True)
+
+
+# Plot the false positives and decoy masses based on their QScore
+plt.figure(figsize=(10,8))
+plt.hist(false_positives_1['QScore'], bins=100, alpha=0.9, label='False Positives Class 1', color='red')
+plt.hist(false_positives_2['QScore'], bins=100, alpha=0.5, label='False Positives Class 2', color='green')
+plt.hist(combined_df.loc[tpindex, 'QScore'],bins=80, alpha=0.4, label = 'True positive', color ='pink')
+plt.hist(decoy_masses['QScore'], bins=100, alpha=0.4, label='Dummy Masses', color='blue')
+plt.hist(false_positives_3['QScore'], bins=100, alpha=0.7, label='False Positive Class3', color='orange')
+plt.xlabel('QScore', fontsize=19)
+plt.ylabel('Count', fontsize=19)
+plt.title('False Positives and Dummy Masses based on QScore', fontsize=22)
+plt.legend()
+plt.show()
