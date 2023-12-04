@@ -1,0 +1,82 @@
+##MS1 evalution taking +-1 isotope error.
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+
+# Read the input files into pandas dataframes
+combined_path = '/content/combined_file_35k,noise=0.csv'
+original_path = '/content/original masses.csv'
+
+combined_df = pd.read_csv(combined_path)
+original_df = pd.read_csv(original_path)
+
+# Define the tolerance limit in parts per million
+ppmtol = 5
+
+# Create the fdval dataframe by combining the ScanNum and MonoisotopicMass columns from the combined_df
+fdval = combined_df[['ScanNum', 'MonoisotopicMass']]
+
+# Convert the ScanNum column to integers
+fdval['ScanNum'] = fdval['ScanNum'].astype(int)
+
+# Create the tpindex1 logical index by checking if the values in the ScanNum column of fdval are present in the Scan column of original_df
+tpindex1 = fdval['ScanNum'].isin(original_df['Scan'].dropna().replace([np.inf, -np.inf], np.nan).astype(int))
+
+# Adjusted code to allow for ±1 Da error with 0.1 Da tolerance
+tpindex2 = np.logical_or.reduce([
+    (fdval.iloc[:, 1].values[:, np.newaxis] >= original_df.iloc[:, 28].values - 0.1) &
+    (fdval.iloc[:, 1].values[:, np.newaxis] <= original_df.iloc[:, 28].values + 0.1),
+    (fdval.iloc[:, 1].values[:, np.newaxis] >= original_df.iloc[:, 28].values - 1.1) &
+    (fdval.iloc[:, 1].values[:, np.newaxis] <= original_df.iloc[:, 28].values - 0.9),
+    (fdval.iloc[:, 1].values[:, np.newaxis] >= original_df.iloc[:, 28].values + 0.9) &
+    (fdval.iloc[:, 1].values[:, np.newaxis] <= original_df.iloc[:, 28].values + 1.1)
+])
+
+# Create the tpindex logical index by combining tpindex1, tpindex2, and the DummyIndex column from combined_df with values of 0
+tpindex = np.logical_and.reduce((
+    tpindex1.values.flatten(),
+    tpindex2.any(axis=1),
+    combined_df['TargetDecoyType'].values == 0
+))
+
+
+
+
+# Identify false positives and decoys
+fpindex = np.logical_and.reduce((
+    np.logical_not(tpindex),
+    combined_df['TargetDecoyType'].values == 0
+))
+decoyindex = combined_df['TargetDecoyType'] > 0
+
+# Plotting the histograms, ECDF, and KDE
+plt.figure(figsize=(8,6))
+plt.hist(combined_df.loc[fpindex, 'Qscore'], bins=100, alpha=0.7, label='False Positive Masses', color='red', edgecolor='grey')
+plt.hist(combined_df.loc[tpindex, 'Qscore'], bins=100, alpha=0.6, label='True Positive Masses', color='green', edgecolor='grey')
+plt.hist(combined_df.loc[decoyindex, 'Qscore'], bins=100, alpha=0.4, label='Decoy Masses', color='blue', edgecolor='grey')
+plt.xlabel('Qscore')
+plt.ylabel('Count')
+plt.title('Histogram of Qscore,res=35k,noise=0')
+plt.legend()
+plt.show()
+
+plt.figure(figsize=(10, 6))
+sns.ecdfplot(data=combined_df.loc[tpindex, 'Qscore'], label='True Positive Masses', color='green')
+sns.ecdfplot(data=combined_df.loc[fpindex, 'Qscore'], label='False Positive Masses', color='red')
+sns.ecdfplot(data=combined_df.loc[decoyindex, 'Qscore'], label='Decoy Masses', color='blue')
+plt.xlabel('Qscore')
+plt.ylabel('ECDF')
+plt.title('Empirical Cumulative Distribution Function,res=35k,noise=0')
+plt.legend()
+plt.show()
+
+plt.figure(figsize=(10, 6))
+sns.kdeplot(data=combined_df.loc[tpindex, 'Qscore'], label='True Positive Masses', shade=True,color='green')
+sns.kdeplot(data=combined_df.loc[fpindex, 'Qscore'], label='False Positive Masses', shade=True, color='red')
+sns.kdeplot(data=combined_df.loc[decoyindex, 'Qscore'], label='Decoy Masses', shade=True,color='blue')
+plt.xlabel('Qscore')
+plt.ylabel('Density')
+plt.title('Kernel Density Estimate')
+plt.legend()
+plt.show()
