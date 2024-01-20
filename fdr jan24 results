@@ -1,0 +1,181 @@
+##MS1 evalution taking +-1 isotope error.
+import pandas as pd
+import numpy as np
+import matplotlib.pyplot as plt
+import seaborn as sns
+from scipy import stats
+from sklearn.mixture import GaussianMixture
+
+# Read the input files into pandas dataframes
+combined_path = '/Users/ayeshaferoz/Downloads/Res70k,noise1e5,centroid/FLASHOUT/adder.csv'
+original_path = '/Users/ayeshaferoz/Downloads/chosen.csv'
+
+combined_df = pd.read_csv(combined_path)
+original_df = pd.read_csv(original_path)
+
+# Define the tolerance limit in parts per million
+ppmtol = 10
+
+# Create the fdval dataframe by combining the ScanNum and MonoisotopicMass columns from the combined_df
+fdval = combined_df[['ScanNum', 'MonoisotopicMass']]
+
+# Convert the ScanNum column to integers
+fdval['ScanNum'] = fdval['ScanNum'].astype(int)
+
+# Create the tpindex1 logical index by checking if the values in the ScanNum column of fdval are present in the Scan column of original_df
+tpindex1 = fdval['ScanNum'].isin(original_df['ScanNum'].dropna().replace([np.inf, -np.inf], np.nan).astype(int))
+
+# Adjusted code to allow for ±1 Da error with 0.1 Da tolerance
+tpindex2 = np.logical_or.reduce([
+    (fdval.iloc[:, 1].values[:, np.newaxis] >= original_df.iloc[:, 2].values - 0.1) &
+    (fdval.iloc[:, 1].values[:, np.newaxis] <= original_df.iloc[:, 2].values + 0.1),
+    (fdval.iloc[:, 1].values[:, np.newaxis] >= original_df.iloc[:, 2].values - 1.1) &
+    (fdval.iloc[:, 1].values[:, np.newaxis] <= original_df.iloc[:, 2].values - 0.9),
+    (fdval.iloc[:, 1].values[:, np.newaxis] >= original_df.iloc[:, 2].values + 0.9) &
+    (fdval.iloc[:, 1].values[:, np.newaxis] <= original_df.iloc[:, 2].values + 1.1)
+])
+
+# Create the tpindex logical index by combining tpindex1, tpindex2, and the DummyIndex column from combined_df with values of 0
+tpindex = np.logical_and.reduce((
+    tpindex1.values.flatten(),
+    tpindex2.any(axis=1),
+    combined_df['TargetDecoyType'].values == 0
+))
+
+
+
+
+# Identify false positives and decoys
+fpindex = np.logical_and.reduce((
+    np.logical_not(tpindex),
+    combined_df['TargetDecoyType'].values == 0
+))
+decoyindex = combined_df['TargetDecoyType'] > 0
+
+# Plotting the histograms, ECDF, and KDE
+plt.figure(figsize=(8,6))
+plt.hist(combined_df.loc[fpindex, 'Qscore'], bins=100, alpha=0.7, label='False Positive Masses', color='red', edgecolor='grey')
+plt.hist(combined_df.loc[tpindex, 'Qscore'], bins=100, alpha=0.6, label='True Positive Masses', color='green', edgecolor='grey')
+plt.hist(combined_df.loc[decoyindex, 'Qscore'], bins=100, alpha=0.4, label='Decoy Masses', color='blue', edgecolor='grey')
+plt.xlabel('Qscore')
+plt.ylabel('Count')
+plt.title('Histogram of Qscore,res=35k,noise=0, for +-1error')
+plt.legend()
+plt.show()
+plt.figure(figsize=(10, 6))
+sns.ecdfplot(data=combined_df.loc[tpindex, 'Qscore'], label='True Positive Masses', color='green')
+sns.ecdfplot(data=combined_df.loc[fpindex, 'Qscore'], label='False Positive Masses', color='red')
+sns.ecdfplot(data=combined_df.loc[decoyindex, 'Qscore'], label='Decoy Masses', color='blue')
+plt.xlabel('Qscore')
+plt.ylabel('ECDF')
+plt.title('Empirical Cumulative Distribution Function,res=35k,noise=0')
+plt.legend()
+plt.show()
+
+plt.figure(figsize=(10, 6))
+#sns.kdeplot(data=combined_df.loc[tpindex, 'Qscore'], label='True Positive Masses', shade=True,color='green')
+sns.kdeplot(data=combined_df.loc[fpindex, 'Qscore'], label='False Positive Masses', shade=True, color='red')
+sns.kdeplot(data=combined_df.loc[decoyindex, 'Qscore'], label='Decoy Masses', shade=True,color='blue')
+plt.xlabel('Qscore')
+plt.ylabel('Density')
+plt.title('Kernel Density Estimate for +-1error')
+plt.legend()
+plt.show()
+# Assuming 'Qscore' and 'Qvalue' are the columns in combined_df that we want to plot
+# Sort the dataframe by 'Qscore'
+sorted_df = combined_df.sort_values(by='Qscore')
+
+# Generate the CDF for Qscore
+sorted_df['Qscore_cdf'] = np.linspace(0, 1, len(sorted_df))
+
+# Plot the CDF of Qscore
+plt.figure(figsize=(10, 6))
+plt.plot(sorted_df['Qscore'], sorted_df['Qscore_cdf'], label='Qscore CDF', color='blue')
+
+# Generate the CDF for Qvalue using the sorted Qvalues
+sorted_df['Qvalue_sorted'] = sorted_df['Qvalue'].sort_values().values
+sorted_df['Qvalue_cdf'] = np.cumsum(sorted_df['Qvalue_sorted']) / sorted_df['Qvalue_sorted'].sum()
+
+# Plot the CDF of Qvalue
+plt.plot(sorted_df['Qscore'], sorted_df['Qvalue_cdf'], label='Qvalue CDF', linestyle='--', color='orange')
+
+# Labeling the plot
+plt.xlabel('Qscore')
+plt.ylabel('CDF')
+plt.title('CDF Plot of Qscore and Qvalue for +-1 error')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+# Assuming 'Qscore' and 'Qvalue' are columns in the DataFrame
+sorted_df = combined_df.sort_values('Qscore')
+
+# Calculate the CDF for Qscore
+sorted_df['Qscore_cdf'] = np.linspace(0, 1, len(sorted_df))
+
+# Calculate the cumulative proportion of Qvalue
+sorted_df['Qvalue_cumprop'] = sorted_df['Qvalue'].cumsum() / sorted_df['Qvalue'].sum()
+
+# Plot the Qscore CDF
+plt.plot(sorted_df['Qscore'], sorted_df['Qscore_cdf'], label='Qscore CDF', color='blue')
+
+# Plot the Qvalue cumulative proportion
+plt.plot(sorted_df['Qscore'], sorted_df['Qvalue_cumprop'], label='Qvalue CDF', linestyle='--', color='orange')
+
+# Labeling the plot
+plt.xlabel('Qscore')
+plt.ylabel('CDF')
+plt.title('CDF Plot of Qscore and Qvalue for +-1error')
+plt.legend()
+plt.grid(True)
+plt.show()
+
+
+
+###
+# Assuming you have already read your data into combined_df
+# If 'Qscore' and 'Qvalue' are not sorted, sort them
+combined_df = combined_df.sort_values(by='Qscore')
+
+# Calculate the cumulative minimum of Qvalue
+combined_df['cummin_Qvalue'] = combined_df['Qvalue'].cummin()
+
+# Plot the Qscore vs. Qvalue using a scatter plot for individual points
+plt.figure(figsize=(10, 6))
+plt.scatter(combined_df['Qscore'], combined_df['Qvalue'], color='orange', s=1, label='Qvalue', alpha=0.6)
+
+# Overlay the True FDR (cumulative minimum Qvalue) with a line plot
+plt.plot(combined_df['Qscore'], combined_df['cummin_Qvalue'], color='blue', label='True FDR')
+
+# Enhancing the plot to match desired aesthetics
+plt.xlabel('Qscore')
+plt.ylabel('Qvalue')
+plt.title('Plot of Qscore and Qvalue')
+plt.legend()
+plt.grid(True)
+plt.show()
+# Assuming combined_df is your dataframe after reading from CSV and sorting
+# Calculate the cumulative minimum of Qvalue
+combined_df['cummin_Qvalue'] = combined_df['Qvalue'].cummin()
+
+plt.figure(figsize=(10, 6))
+
+combined_df['cummin_Qvalue'] = combined_df['Qvalue'].cummin()
+
+plt.figure(figsize=(10, 6))
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
