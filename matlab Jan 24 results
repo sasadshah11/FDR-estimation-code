@@ -1,0 +1,211 @@
+close all;
+
+load('newdecoy.mat')
+
+res = 140;
+noise = ['1e5'];
+%mode = 'profile';
+mode = 'centroid';
+iso = 0;
+tsvname =[ 'res' num2str(res) 'noise' noise mode '_ms1.tsv'];
+%tsvname = 'tmpms1.tsv';
+tsv = tdfread(tsvname);
+
+%trueset = [truesettsv.Scan_Number(truesettsv.Fille_name == file) truesettsv.Mono_mass(truesettsv.Fille_name == file)];
+
+protonmass=1.00727647;
+%trueset=[scan3 t3];
+ppmtol = 10;
+
+fdval = [tsv.ScanNum + 1 tsv.MonoisotopicMass];
+%sum(abs(data1' - data2)./max(data1', data2)*1e6<ppmtol, 1) > 0;
+
+tpindex2 = sum(abs(fdval(:,2)' - trueset(:,2))./max(fdval(:,2)', trueset(:,2))*1e6 < ppmtol,1) > 0;
+tpindex2 = tpindex2 & (sum(abs(fdval(:,1)' - trueset(:,1)) == 0) > 0);
+if (iso > 0)
+    for i=1:iso
+        tpindex2 = tpindex2 | (sum(abs(fdval(:,2)' + i * protonmass - trueset(:,2))./max(fdval(:,2)' + i * protonmass, trueset(:,2))*1e6 < ppmtol,1) > 0);
+        tpindex2 = tpindex2 | (sum(abs(fdval(:,2)' - i * protonmass - trueset(:,2))./max(fdval(:,2)' - i * protonmass, trueset(:,2))*1e6 < ppmtol,1) > 0);
+    end
+end
+%tpindex2 = tpindex2 | (sum(abs(fdval(:,2)' + protonmass - trueset(:,2))./max(fdval(:,2)' + 2 * protonmass, trueset(:,2))*1e6 < ppmtol,1) > 0);
+%tpindex2 = tpindex2 | (sum(abs(fdval(:,2)' - protonmass - trueset(:,2))./max(fdval(:,2)' - 2 * protonmass, trueset(:,2))*1e6 < ppmtol,1) > 0);
+
+
+tpindex = tpindex2' & tsv.TargetDecoyType == 0;
+fpindex = ( ~tpindex2') & tsv.TargetDecoyType == 0;
+decoyindex = tsv.TargetDecoyType > 0 ;
+
+sum(tpindex)
+sum(fpindex)
+
+figure0 = figure('defaultAxesFontSize',14);
+fps=1;
+tps=1;
+auc = 0;
+for q= 0:.005:1
+    fp = sum(tsv.Qscore2D(fpindex)>q)/length(tsv.Qscore2D(fpindex));
+    tp = sum(tsv.Qscore2D(tpindex)>q)/length(tsv.Qscore2D(tpindex));
+    auc = auc + (fps(end)-fp)*(tp + tps(end))/2;
+    fps = [fps; fp];
+    tps = [tps; tp];
+    
+end
+plot(fps, tps);
+title(num2str(auc))
+grid on;
+
+[h1, e1] = histcounts(tsv.Qscore2D(tsv.TargetDecoyType  == 1),0:.005:1);
+
+[h2 e2] = histcounts(tsv.Qscore2D(tsv.TargetDecoyType  == 2),0:.005:1);
+
+[h3, e3] = histcounts(tsv.Qscore2D(tsv.TargetDecoyType  == 3),0:.005:1);
+
+
+figure1 = figure('defaultAxesFontSize',14);
+histogram(tsv.Qscore2D(tpindex),0:.005:1, 'DisplayStyle','bar', 'LineStyle','none');
+hold on;
+histogram(tsv.Qscore2D(fpindex),0:.005:1, 'DisplayStyle','bar', 'LineStyle','none');
+hold on;
+
+
+bar((e1(2:end) + e2(1:end-1))/2, h1 + .5*h2 + h3 , 'LineStyle','none', 'BarWidth',1, 'FaceAlpha', .5);
+
+
+%his = histogram(tsv.Qscore2D(decoyindex),0:.005:1, 'DisplayStyle','bar', 'LineStyle','none');
+title(['Resolution: ' num2str(res) 'k Noise: ' noise ' ' mode ' spectra'  ])
+%bar(0+.005:.01:1-.005, d1+d2+d3);
+
+
+
+
+
+grid on;
+
+legend({'#true positives', '#false positives', '#decoy masses', ...
+    %'#1', '#2', '#3'...
+    },'Location', 'northwest')
+xlabel('Qscore2D')
+ylabel('Count')
+
+xlim([0 1])
+
+
+
+
+figure;
+%histogram(tsv.Qscore2D(fpindex),0:.005:1, 'DisplayStyle','bar');
+hold on;
+
+histogram(tsv.Qscore2D(tsv.TargetDecoyType  == 1),0:.005:1, 'DisplayStyle','bar'); hold on;
+
+histogram(tsv.Qscore2D(tsv.TargetDecoyType  == 2),0:.005:1, 'DisplayStyle','bar');
+
+histogram(tsv.Qscore2D(tsv.TargetDecoyType  == 3),0:.005:1, 'DisplayStyle','bar');
+
+grid on;
+
+xlim([0 1])
+
+figure2 = figure('defaultAxesFontSize',14);
+fp = histogram(tsv.Qscore2D(fpindex),0:.005:1);
+fpv = fp.Values;
+
+dp = histogram(tsv.Qscore2D(~decoyindex),0:.005:1);
+dpv = dp.Values;
+xlim([0 1])
+
+cdpv = zeros(size(dpv));
+cfpv = zeros(size(fpv));
+
+for i=1:length(dpv)
+    cdpv(end-i+1) = sum(dpv(end-i+1:end));
+    cfpv(end-i+1) = sum(fpv(end-i+1:end));
+end
+
+
+cdpv2 = zeros(size(dpv));
+cfpv2 = zeros(size(fpv));
+
+%Kolmogorov–Smirnov test
+% KS = 0;
+% for i=1:length(dpv)
+%     cdpv2(i) = sum(dpv(1:i));
+%     cfpv2(i) = sum(fpv(1:i));
+% end
+% 
+% cdpv2 = cdpv2/cdpv2(end);
+% cfpv2 = cfpv2/cfpv2(end);
+% for i=1:length(dpv)
+%     KS = max(KS, abs(cdpv2(i) - cfpv2(i)));
+% end
+% 
+% display(['KS : ' num2str(KS)]); 
+% 
+
+
+fpv = fpv + .01;
+dpv= dpv + .01;
+
+% sample1 = randsample((dp.BinEdges(2:end) + dp.BinEdges(1:end-1))/2,100,true,dpv);%   slicesample(0.5,1000,'pdf',fpv);
+% sample2 = randsample((dp.BinEdges(2:end) + fp.BinEdges(1:end-1))/2,100,true,fpv);
+% 
+% [h, p] = kstest2(sample1,sample2);
+% p
+display(['KL div : ' num2str(kldiv((dp.BinEdges(2:end) + dp.BinEdges(1:end-1))/2,fpv./sum(fpv),dpv./sum(dpv)))])
+
+fdr = cfpv./(cdpv);
+minfdr = 1;
+for i=1:length(fdr)
+    fdr(i) = min(minfdr, fdr(i));
+    minfdr = fdr(i);
+end
+
+plot((dp.BinEdges(2:end) + dp.BinEdges(1:end-1))/2, fdr, 'LineWidth', 1)
+
+
+title(['Resolution: ' num2str(res) 'k Noise: ' noise ' ' mode ' spectra'  ])
+hold on;
+%plot(tsv.Qscore2D(tsv.Decoy==0),tsv.QvalueWithChargeDecoyOnly(tsv.Decoy==0),'.')
+%plot(tsv.Qscore2D(tsv.Decoy==0),tsv.QvalueWithIsotopeDecoyOnly(tsv.Decoy==0),'.')
+
+tmp = [tsv.Qscore2D(tsv.TargetDecoyType==0)' ;tsv.Qvalue(tsv.TargetDecoyType==0)']';
+%tmp = [tsv.Qscore2D(tsv.Decoy==0)' ;tsv.QvalueWithChargeDecoyOnly(tsv.Decoy==0)' + tsv.QvalueWithIsotopeDecoyOnly(tsv.Decoy==0)']';
+
+tmp = sortrows(tmp);
+
+plot(tmp(:,1), tmp(:,2), '--', 'LineWidth', 1)
+ylim([0 1])
+xlim([0 1])
+grid on;
+% Display the results
+disp(['Mean difference: ' num2str(mean_difference)]);
+disp(['Max difference: ' num2str(max_difference)]);
+
+xlabel('Qscore2D')
+ylabel('qvalue or FDR')
+legend({'True FDR', 'qvalue'})
+% Assuming fdr and tmp(:,2) are your two arrays and they are of the same length
+differences = abs(fdr - tmp(:,2));
+mean_difference = mean(differences);
+max_difference = max(differences);
+% Assuming fdr and tmp(:,2) are your two arrays and they are of the same length
+differences = abs(fdr - tmp(:,2));
+
+% Find qvalues less than 10 percent
+qvalues_less_than_10_percent = tmp(:,2) < 0.1;
+
+% Filter differences for the selected qvalues
+differences_filtered = differences(qvalues_less_than_10_percent);
+
+% Find the maximum absolute difference
+max_difference = max(differences_filtered);
+
+% Display the result
+disp(['Max absolute difference for qvalues less than 10%: ' num2str(max_difference)]);
+
+
+
+
+
+
