@@ -1,0 +1,79 @@
+ximport pandas as pd
+import matplotlib.pyplot as plt
+import seaborn as sns
+import numpy as np
+
+# Load the deconvolved CSV file
+deconvolved_df = pd.read_csv('/content/CA,res240k,noise1e5,b,y_centroid_ms2.tsv', sep='\t')  # Replace with the path to your deconvolved CSV file
+
+# Load the true masses CSV file
+true_masses_df = pd.read_csv('/content/b,yions.csv')  # Replace with the path to your true masses CSV file
+
+# Define ppm tolerance
+ppm_tolerance = 10  # Adjust as needed
+
+# Filter deconvolved_df for rows where TargetDummyType is 0
+filtered_deconvolved_df = deconvolved_df[deconvolved_df['TargetDecoyType'] == 0]
+
+# Initialize empty lists for true positives, false positives, and dummy masses
+true_positives = []
+false_positives = []
+dummy_masses = []
+
+# Iterate through rows in filtered_deconvolved_df
+for index, row in filtered_deconvolved_df.iterrows():
+    # Calculate ppm difference between each MonoisotopicMass in filtered_deconvolved_df
+    # and true_masses_df and check if it's within ppm_tolerance or ±1 isotope error with 0.1 Da tolerance
+    ppm_diff = abs(row['MonoisotopicMass'] - true_masses_df['MonoisotopicMass']) / true_masses_df['MonoisotopicMass'] * 1e6
+    isotope_error_condition = (
+        (ppm_diff <= ppm_tolerance) |
+        ((row['MonoisotopicMass'] >= true_masses_df['MonoisotopicMass'] - 0.1) & 
+         (row['MonoisotopicMass'] <= true_masses_df['MonoisotopicMass'] + 0.1)) |
+        ((row['MonoisotopicMass'] >= true_masses_df['MonoisotopicMass'] - 1.1) & 
+         (row['MonoisotopicMass'] <= true_masses_df['MonoisotopicMass'] - 0.9)) |
+        ((row['MonoisotopicMass'] >= true_masses_df['MonoisotopicMass'] + 0.9) & 
+         (row['MonoisotopicMass'] <= true_masses_df['MonoisotopicMass'] + 1.1))
+    )
+    matches_within_tolerance = any(isotope_error_condition)
+
+    # Classify the rows based on matching criteria
+    if matches_within_tolerance:
+        true_positives.append(row)
+    else:
+        false_positives.append(row)
+
+
+# Filter the deconvolved_df for rows where TargetDummyType is greater than 0
+dummy_masses_df = deconvolved_df[deconvolved_df['TargetDecoyType'] > 0]
+
+# Convert true_positives and false_positives to dataframes
+true_positives_df = pd.DataFrame(true_positives)
+false_positives_df = pd.DataFrame(false_positives)
+
+# Create ECDF plots based on Qscore
+plt.figure(figsize=(12, 10))
+
+# Function to calculate ECDF
+def ecdf(data):
+    x = np.sort(data)
+    y = np.arange(1, len(data) + 1) / len(data)
+    return x, y
+
+# Create ECDF plots for True Positives, False Positives, and Dummy Masses
+for data, label, color in [(true_positives_df['Qscore'], 'True positive masses', 'green'),
+                           (false_positives_df['Qscore'], 'False positive masses', 'red'),
+                           (dummy_masses_df['Qscore'], 'Decoy masses', 'blue')]:
+    x, y = ecdf(data)
+    plt.plot(x, y, marker='.', linestyle='none', label=label, color=color)
+
+plt.xlabel('Qscore', fontsize=15, fontweight='bold')
+plt.ylabel('ECDF', fontsize=15, fontweight='bold')
+plt.title('ECDF Plot for Resolution=240k, Noise=1e5, b, y', fontsize=15, fontweight='bold')
+plt.legend()
+plt.grid(True)
+plt.tight_layout()
+plt.show()
+
+print(len(true_positives_df))
+print(len(false_positives_df))
+print(len(filtered_deconvolved_df))
