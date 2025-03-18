@@ -1,0 +1,101 @@
+import numpy as np
+import pandas as pd
+import matplotlib.pyplot as plt
+
+# Load the data
+combined_path = '/content/res75noise1e5centroid_ms1.tsv'
+original_path = '/content/chosen.csv'
+combined_df = pd.read_csv(combined_path, sep='\t')
+original_df = pd.read_csv(original_path)
+
+# Define constants
+protonmass = 1.00727647
+ppmtol = 10
+iso = 1
+
+# Process scan numbers
+fdval = combined_df[['ScanNum', 'MonoisotopicMass']].copy()
+fdval['ScanNum'] += 1  # Adjust for MATLAB indexing
+
+trueset = original_df[['ScanNum', 'MonoisotopicMass']].to_numpy()
+
+# Identify true positives
+tpindex2 = np.sum(np.abs(fdval.iloc[:, 1].values[:, np.newaxis] - trueset[:, 1]) /
+                  np.maximum(fdval.iloc[:, 1].values[:, np.newaxis], trueset[:, 1]) * 1e6 < ppmtol, axis=1) > 0
+tpindex2 &= (np.sum(np.abs(fdval.iloc[:, 0].values[:, np.newaxis] - trueset[:, 0]) == 0, axis=1) > 0)
+
+if iso > 0:
+    for i in range(1, iso + 1):
+        tpindex2 |= (np.sum(np.abs(fdval.iloc[:, 1].values[:, np.newaxis] + i * protonmass - trueset[:, 1]) /
+                             np.maximum(fdval.iloc[:, 1].values[:, np.newaxis] + i * protonmass, trueset[:, 1]) * 1e6 < ppmtol, axis=1) > 0)
+        tpindex2 |= (np.sum(np.abs(fdval.iloc[:, 1].values[:, np.newaxis] - i * protonmass - trueset[:, 1]) /
+                             np.maximum(fdval.iloc[:, 1].values[:, np.newaxis] - i * protonmass, trueset[:, 1]) * 1e6 < ppmtol, axis=1) > 0)
+
+tpindex = tpindex2 & (combined_df['TargetDecoyType'] == 0)
+fpindex = (~tpindex2) & (combined_df['TargetDecoyType'] == 0)
+decoyindex = combined_df['TargetDecoyType'] > 0
+
+# Plot ROC curve
+fps, tps, auc = [1], [1], 0
+for q in np.arange(0, 1.005, 0.005):
+    fp = np.sum(combined_df['Qscore2D'][fpindex] > q) / len(combined_df['Qscore2D'][fpindex])
+    tp = np.sum(combined_df['Qscore2D'][tpindex] > q) / len(combined_df['Qscore2D'][tpindex])
+    auc += (fps[-1] - fp) * (tp + tps[-1]) / 2
+    fps.append(fp)
+    tps.append(tp)
+
+plt.figure(figsize=(8, 6))
+plt.plot(fps, tps, label=f'AUC: {auc:.3f}')
+plt.title('ROC Curve')
+plt.xlabel('False Positive Rate')
+plt.ylabel('True Positive Rate')
+plt.legend()
+plt.grid(False)
+plt.show()
+
+# Histograms
+plt.figure(figsize=(8, 6))
+plt.hist(combined_df['Qscore2D'][tpindex], bins=np.arange(0, 1.005, 0.005), histtype='step', label='True Positives')
+plt.hist(combined_df['Qscore2D'][fpindex], bins=np.arange(0, 1.005, 0.005), histtype='step', label='False Positives')
+plt.hist(combined_df['Qscore2D'][decoyindex], bins=np.arange(0, 1.005, 0.005), histtype='step', label='Decoy Masses')
+plt.title('Qscore2D Distributions')
+plt.xlabel('Qscore2D')
+plt.ylabel('Count')
+plt.legend()
+plt.xlim([0, 1])
+plt.grid(False)
+plt.show()
+
+# FDR Plot
+plt.figure(figsize=(8, 6))
+fp_hist = np.histogram(combined_df['Qscore2D'][fpindex], bins=np.arange(0, 1.005, 0.005))
+dp_hist = np.histogram(combined_df['Qscore2D'][~decoyindex], bins=np.arange(0, 1.005, 0.005))
+
+fpv, dpv = fp_hist[0], dp_hist[0]
+cdpv = np.cumsum(dpv[::-1])[::-1]
+cfpv = np.cumsum(fpv[::-1])[::-1]
+fdr = cfpv / (cdpv + np.finfo(float).eps)
+
+# Ensure monotonic decreasing FDR
+minfdr = 1
+for i in range(len(fdr)):
+    fdr[i] = min(minfdr, fdr[i])
+    minfdr = fdr[i]
+
+bin_centers = (dp_hist[1][1:] + dp_hist[1][:-1]) / 2
+plt.plot(bin_centers, fdr, 'darkblue', linewidth=1, label='True FDR')  # Dark blue for true FDR
+
+# Overlay Qvalue with red dashed line
+tmp = combined_df[['Qscore2D', 'Qvalue']][combined_df['TargetDecoyType'] == 0].sort_values('Qscore2D').values
+plt.plot(tmp[:, 0], tmp[:, 1], 'red', linestyle='--', linewidth=1, label='Estimated FDR')  # Red dashed line for estimated FDR
+
+plt.title('Res70k,noise1e5, centroid')
+plt.xlabel('Qscore2D')
+plt.ylabel('q-value or FDR')
+plt.legend()
+plt.ylim([0, 1])
+plt.xlim([0, 1])
+plt.grid(False)
+plt.show()
+
+
